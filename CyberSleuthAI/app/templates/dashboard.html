@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>🛡 CyberSleuth AI - Threat Detection Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background-color: #f0f4f8;
+    }
+    h1, h2 {
+      color: #333;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #ccc;
+      text-align: center;
+    }
+    th {
+      background-color: #dce3ea;
+    }
+    .chart-container {
+      width: 100%;
+      max-width: 900px;
+      margin: auto;
+    }
+    .replay-controls {
+      text-align: center;
+      margin-top: 15px;
+    }
+    .btn {
+      background-color: #333;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      cursor: pointer;
+      border-radius: 5px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🛡 CyberSleuth AI - Threat Detection Dashboard</h1>
+
+  <h2>📊 Brute-Force Attempts Over Time</h2>
+  <div class="chart-container">
+    <canvas id="mainChart"></canvas>
+  </div>
+
+  <h2>📽 Incident Replay (Timeline)</h2>
+  <div class="chart-container">
+    <canvas id="replayChart"></canvas>
+    <div class="replay-controls">
+      <button id="playBtn" class="btn">▶ Play Replay</button>
+    </div>
+  </div>
+
+  <h2>🚨 Detected SSH Brute-Force Alerts</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>IP</th>
+        <th>Username</th>
+        <th>Message</th>
+      </tr>
+    </thead>
+    <tbody id="alertTable">
+      <tr><td colspan="4">Loading alerts...</td></tr>
+    </tbody>
+  </table>
+
+  <script>
+    let mainChart, replayChart;
+    let fullData = [];
+
+    function groupByTimestamp(data) {
+      const grouped = {};
+      data.forEach(alert => {
+        if (!grouped[alert.timestamp]) grouped[alert.timestamp] = 0;
+        grouped[alert.timestamp]++;
+      });
+      return grouped;
+    }
+
+    function updateMainChart(data) {
+      const grouped = groupByTimestamp(data);
+      const times = Object.keys(grouped).sort();
+      const attempts = times.map(t => grouped[t]);
+
+      if (mainChart) {
+        mainChart.data.labels = times;
+        mainChart.data.datasets[0].data = attempts;
+        mainChart.update();
+      } else {
+        mainChart = new Chart(document.getElementById("mainChart"), {
+          type: "line",
+          data: {
+            labels: times,
+            datasets: [{
+              label: "Brute-force Attempts",
+              data: attempts,
+              borderColor: "red",
+              backgroundColor: "rgba(255,0,0,0.1)",
+              fill: true,
+              tension: 0.3
+            }]
+          }
+        });
+      }
+    }
+
+    function updateAlertsTable(data) {
+      const tableBody = document.getElementById("alertTable");
+      tableBody.innerHTML = data.map(a => `
+        <tr>
+          <td>${a.timestamp}</td>
+          <td>${a.source_ip}</td>
+          <td>${a.username}</td>
+          <td>${a.message}</td>
+        </tr>
+      `).join("");
+    }
+
+    function fetchAndUpdateAlerts() {
+      fetch("/api/alerts")
+        .then(res => res.json())
+        .then(data => {
+          fullData = data;
+          updateMainChart(data);
+          updateAlertsTable(data);
+        });
+    }
+
+    // Fetch alerts initially and refresh every 5 seconds
+    fetchAndUpdateAlerts();
+    setInterval(fetchAndUpdateAlerts, 5000);
+
+    // Incident Replay Setup
+    fetch("/api/replay-alerts")
+      .then(res => res.json())
+      .then(data => {
+        const ctx = document.getElementById("replayChart").getContext("2d");
+        const replayData = {
+          labels: [],
+          datasets: [{
+            label: "Replay of SSH Attempts",
+            data: [],
+            borderColor: "blue",
+            backgroundColor: "rgba(0,0,255,0.2)",
+            fill: true,
+            tension: 0.3
+          }]
+        };
+
+        replayChart = new Chart(ctx, {
+          type: 'line',
+          data: replayData,
+          options: { animation: false }
+        });
+
+        document.getElementById("playBtn").onclick = () => {
+          replayData.labels = [];
+          replayData.datasets[0].data = [];
+          replayChart.update();
+
+          const grouped = groupByTimestamp(data);
+          const timestamps = Object.keys(grouped).sort();
+
+          let i = 0;
+          const interval = setInterval(() => {
+            if (i >= timestamps.length) {
+              clearInterval(interval);
+              return;
+            }
+            replayData.labels.push(timestamps[i]);
+            replayData.datasets[0].data.push(grouped[timestamps[i]]);
+            replayChart.update();
+            i++;
+          }, 500);
+        };
+      });
+  </script>
+</body>
+</html>

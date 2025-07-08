@@ -1,0 +1,27 @@
+ # utils/emailer.py
+
+import smtplib
+import os
+from email.mime.text import MIMEText
+
+def send_email_alert(subject, body):
+    sender = os.getenv("EMAIL_USER")
+    password = os.getenv("EMAIL_PASS")
+    recipient = os.getenv("EMAIL_RECIPIENT", sender)
+
+    if not sender or not password:
+        print("[!] EMAIL_USER or EMAIL_PASS not set in environment")
+        return
+
+    msg = MIMEText(body)
+    msg["Subject"] = subject
+    msg["From"] = sender
+    msg["To"] = recipient
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(sender, password)
+            server.send_message(msg)
+        print(f"[+] Email alert sent to {recipient}")
+    except Exception as e:
+        print(f"[!] Failed to send email alert: {e}")
